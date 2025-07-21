@@ -311,7 +311,7 @@ static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkele
     hkArray<hkQsTransform> localTransforms(nodes.getSize() * (int)lFrameCount);
     hkArray<hkQsTransform> modelTransforms(nodes.getSize());
 
-    
+    hkaSkeletonUtils::transformLocalPoseToModelPose(nodes.getSize(), &skeleton->m_parentIndices[0], &skeleton->m_referencePose[0], &modelTransforms[0]);
 
     //Create empty/default animated reference frame
     hkaDefaultAnimatedReferenceFrame* DefaultRefFrame = new hkaDefaultAnimatedReferenceFrame(hkFinishLoadedObjectFlag());
@@ -326,7 +326,6 @@ static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkele
     FbxNode* ReferenceNode = pScene->FindNodeByName("Reference");
     FbxNode* rootMotionNode = ReferenceNode->GetParent();
 
-    hkaSkeletonUtils::transformLocalPoseToModelPose(nodes.getSize(), &skeleton->m_parentIndices[0], &skeleton->m_referencePose[0], &modelTransforms[0]);
     for (FbxLongLong i = 0; i < lFrameCount; i++)
     {
         const FbxTime lTime = lTimeSpan.GetStart() + FbxTimeSeconds((double)i / (double)(lFrameCount - 1) * lSecondDouble);
@@ -339,10 +338,9 @@ static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkele
         sampleArray.pushBack(toHavok(rootMotionVector4));
 
         for (int j = 0; j < nodes.getSize(); j++)
-        {    
+        {
             if (nodes[j] != nullptr)
                 modelTransforms[j] = toHavok(nodes[j]->EvaluateGlobalTransform(lTime));
-
         }
 
         hkaSkeletonUtils::transformModelPoseToLocalPose(nodes.getSize(), &skeleton->m_parentIndices[0], &modelTransforms[0], &localTransforms[(int)i * nodes.getSize()]);
