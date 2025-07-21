@@ -311,20 +311,45 @@ static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkele
     hkArray<hkQsTransform> localTransforms(nodes.getSize() * (int)lFrameCount);
     hkArray<hkQsTransform> modelTransforms(nodes.getSize());
 
-    hkaSkeletonUtils::transformLocalPoseToModelPose(nodes.getSize(), &skeleton->m_parentIndices[0], &skeleton->m_referencePose[0], &modelTransforms[0]);
+    
 
+    //Reference frame stuff
+    hkaDefaultAnimatedReferenceFrame* DefaultRefFrame = new hkaDefaultAnimatedReferenceFrame(hkFinishLoadedObjectFlag());
+    DefaultRefFrame->m_forward = hkVector4(0, -1, 0);
+    DefaultRefFrame->m_up = hkVector4(0, 0, 1);
+    DefaultRefFrame->m_duration = animation->m_duration;
+    hkArray<hkVector4> sampleArray;
+    FbxNode* ReferenceNode = pScene->FindNodeByName("Reference");
+    FbxNode* rootMotionNode = ReferenceNode->GetParent();
+
+    //Testing
+
+    hkaSkeletonUtils::transformLocalPoseToModelPose(nodes.getSize(), &skeleton->m_parentIndices[0], &skeleton->m_referencePose[0], &modelTransforms[0]);
     for (FbxLongLong i = 0; i < lFrameCount; i++)
     {
         const FbxTime lTime = lTimeSpan.GetStart() + FbxTimeSeconds((double)i / (double)(lFrameCount - 1) * lSecondDouble);
+       
+        FbxAMatrix* rootMotionMatrix = &rootMotionNode->EvaluateLocalTransform(lTime);
+        FbxVector4 rootMotionVector4 = rootMotionMatrix->GetT();
+        //rootMotionVector4[0] = rootMotionVector4[0] * -1;
+        //rootMotionVector4[1] = rootMotionVector4[1] * -1;
+        rootMotionVector4[2] = rootMotionVector4[2] * -1;
+        //rootMotionVector4[2] = rootMotionVector4[1];
+         
+        sampleArray.pushBack(toHavok(rootMotionVector4));
 
         for (int j = 0; j < nodes.getSize(); j++)
-        {
+        {    
             if (nodes[j] != nullptr)
                 modelTransforms[j] = toHavok(nodes[j]->EvaluateGlobalTransform(lTime));
+
         }
 
         hkaSkeletonUtils::transformModelPoseToLocalPose(nodes.getSize(), &skeleton->m_parentIndices[0], &modelTransforms[0], &localTransforms[(int)i * nodes.getSize()]);
     }
+
+    toPtrArray(sampleArray, DefaultRefFrame->m_referenceFrameSamples, DefaultRefFrame->m_numReferenceFrameSamples);
+    animation->setExtractedMotion(DefaultRefFrame);
 
     // Unroll quaternions so spline compression doesn't flicker.
     for (FbxLongLong i = 0; i < lFrameCount; i++)

@@ -55,6 +55,9 @@
 #include <Animation/Animation/Animation/hkaAnimationBinding.h>
 #include <Animation/Animation/Rig/hkaSkeleton.h>
 #include <Animation/Animation/Rig/hkaSkeletonUtils.h>
+#include <Animation/Animation/Motion/hkaAnimatedReferenceFrameUtils.h>
+#include <Animation/Animation/Motion/Default/hkaDefaultAnimatedReferenceFrame.h>
+#include <Common/Base/Reflection/hkFinishLoadedObjectFlag.h>
 
 #if _2010 || _2012
 #include <Common/Serialize/Util/hkSerializeUtil.h>
