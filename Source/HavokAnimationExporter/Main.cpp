@@ -313,9 +313,29 @@ static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkele
 
     hkaSkeletonUtils::transformLocalPoseToModelPose(nodes.getSize(), &skeleton->m_parentIndices[0], &skeleton->m_referencePose[0], &modelTransforms[0]);
 
+    //Create empty/default animated reference frame
+    hkaDefaultAnimatedReferenceFrame* DefaultRefFrame = new hkaDefaultAnimatedReferenceFrame(hkFinishLoadedObjectFlag());
+    DefaultRefFrame->m_forward = hkVector4(0, -1, 0);
+    DefaultRefFrame->m_up = hkVector4(0, 0, 1);
+    DefaultRefFrame->m_duration = animation->m_duration; 
+    
+    //'sampleArray' isn't one of my dumb test names, havok refers to the key frames used for the reference frame/root motion as 'samples'
+    hkArray<hkVector4> sampleArray;
+    //Get the armature root by finding the parent of the "reference" bone. 
+    //Otherwise the first item in the FBX scene doesn't seem to be the armarture root, and searching for "EvilRoot" would return a different object with the same name.
+    FbxNode* ReferenceNode = pScene->FindNodeByName("Reference");
+    FbxNode* rootMotionNode = ReferenceNode->GetParent();
+
     for (FbxLongLong i = 0; i < lFrameCount; i++)
     {
         const FbxTime lTime = lTimeSpan.GetStart() + FbxTimeSeconds((double)i / (double)(lFrameCount - 1) * lSecondDouble);
+       
+        FbxAMatrix* rootMotionMatrix = &rootMotionNode->EvaluateLocalTransform(lTime);
+        FbxVector4 rootMotionVector4 = rootMotionMatrix->GetT();
+        rootMotionVector4[1] = rootMotionVector4[1] * -1;
+        rootMotionVector4[2] = rootMotionVector4[2] * -1;
+         
+        sampleArray.pushBack(toHavok(rootMotionVector4));
 
         for (int j = 0; j < nodes.getSize(); j++)
         {
@@ -325,6 +345,9 @@ static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkele
 
         hkaSkeletonUtils::transformModelPoseToLocalPose(nodes.getSize(), &skeleton->m_parentIndices[0], &modelTransforms[0], &localTransforms[(int)i * nodes.getSize()]);
     }
+    //Set root motion values in the array to the default reference frame, set it as the extracted motion for the animation
+    toPtrArray(sampleArray, DefaultRefFrame->m_referenceFrameSamples, DefaultRefFrame->m_numReferenceFrameSamples);
+    animation->setExtractedMotion(DefaultRefFrame);
 
     // Unroll quaternions so spline compression doesn't flicker.
     for (FbxLongLong i = 0; i < lFrameCount; i++)
