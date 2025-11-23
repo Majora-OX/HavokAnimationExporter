@@ -53,13 +53,13 @@ Available for Havok 2010 2.0 and Havok 2012 2.0.
 
 * `-m` or `--motion`
 
-    * Include Root Motion Data when exporting animations
+    * Include Root Motion Data when exporting animations.  
 Available only for Havok 5.5.0.
 
 * `-ac` or `--armatureChild`
 
-    * Name of a bone that's a child to the armature for root motion exports.
-Will default to searching for `Reference` if not given.
+    * Name of a bone that's a child to the armature for root motion exports.  
+Will default to searching for `Reference` if not given.  
 Available only for Havok 5.5.0.
 
 ### Examples
@@ -103,13 +103,13 @@ If the tag is missing during animation export, HAE will not be able to locate th
 
 #### Root Animation
 
-This fork allows for Root Animation Data to be included in exports.
+This fork allows for Root Animation Data to be included in exports.  
 As an example for creating an animation with Root Motion for the Werehog you must:
 * First animate the motion you want onto the reference bone (E.G animate the reference bone moving forward if you want the character to move forward during the animation).
 * Add an animation to the root armature (in this case `EvilRoot`) with the exact opposite motion (E.G If `Reference` is moved forward, move the armature backwards the exact same amount so it looks like the character isn't moving at all).
 * Finally convert the .FBX to .HKX using the exporter while using the `-m` or `--motion` option.
 
-When creating an animation that has a rotation motion, only animate the rotation onto the root armature without adding animation to the Reference bone.
+When creating an animation that has a rotation motion, only animate the rotation onto the root armature without adding animation to the Reference bone.  
 If you're making an animation for a rig that doesn't have a `Reference` bone, use the `--armatureChild` option to specify a different bone that is a child to the armature root.
 
 ### Havok 2010 2.0 (Sonic Generations)
