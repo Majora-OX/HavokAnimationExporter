@@ -211,7 +211,7 @@ static void havokErrorReportFunction(const char*, void*)
 {
 }
 
-static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkeleton* skeleton, const char* originalSkeletonName, bool compress, double fps)
+static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkeleton* skeleton, const char* originalSkeletonName, bool compress, double fps, bool extractMotion, fbxsdk::FbxString armatureChildName)
 {
     FbxAnimStack* pAnimStack = pScene->GetCurrentAnimationStack();
 
@@ -315,27 +315,44 @@ static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkele
 
     //Create empty/default animated reference frame
     hkaDefaultAnimatedReferenceFrame* DefaultRefFrame = new hkaDefaultAnimatedReferenceFrame(hkFinishLoadedObjectFlag());
-    DefaultRefFrame->m_forward = hkVector4(0, -1, 0);
-    DefaultRefFrame->m_up = hkVector4(0, 0, 1);
+    DefaultRefFrame->m_forward = hkVector4(0, 0, 1);
+    DefaultRefFrame->m_up = hkVector4(0, 1, 0);
     DefaultRefFrame->m_duration = animation->m_duration; 
     
     //'sampleArray' isn't one of my dumb test names, havok refers to the key frames used for the reference frame/root motion as 'samples'
     hkArray<hkVector4> sampleArray;
     //Get the armature root by finding the parent of the "reference" bone. 
     //Otherwise the first item in the FBX scene doesn't seem to be the armarture root, and searching for "EvilRoot" would return a different object with the same name.
-    FbxNode* ReferenceNode = pScene->FindNodeByName("Reference");
-    FbxNode* rootMotionNode = ReferenceNode->GetParent();
+    FbxNode* ReferenceNode = nullptr;
+    FbxNode* rootMotionNode = nullptr;
+    if (extractMotion)
+    {
+        ReferenceNode = pScene->FindNodeByName(armatureChildName);
+        if (ReferenceNode == NULL)
+        {
+            printf("ERROR: Couldn't find given armature child");
+            exit(0);
+        }
+        rootMotionNode = ReferenceNode->GetParent();
+    }
 
     for (FbxLongLong i = 0; i < lFrameCount; i++)
     {
         const FbxTime lTime = lTimeSpan.GetStart() + FbxTimeSeconds((double)i / (double)(lFrameCount - 1) * lSecondDouble);
-       
-        FbxAMatrix* rootMotionMatrix = &rootMotionNode->EvaluateLocalTransform(lTime);
-        FbxVector4 rootMotionVector4 = rootMotionMatrix->GetT();
-        rootMotionVector4[1] = rootMotionVector4[1] * -1;
-        rootMotionVector4[2] = rootMotionVector4[2] * -1;
-         
-        sampleArray.pushBack(toHavok(rootMotionVector4));
+
+        if (extractMotion) {
+            FbxAMatrix* rootMotionMatrix = &rootMotionNode->EvaluateLocalTransform(lTime);
+            FbxVector4 rootMotionVector4 = rootMotionMatrix->GetT();
+
+            rootMotionVector4[0] = rootMotionVector4[0] * -1;
+            rootMotionVector4[1] = rootMotionVector4[1] * -1;
+            rootMotionVector4[2] = rootMotionVector4[2] * -1;
+
+            FbxVector4 rootRotationVector4 = rootMotionMatrix->GetR();
+            rootMotionVector4[3] = rootRotationVector4[2] / 56.65;
+
+            sampleArray.pushBack(toHavok(rootMotionVector4));
+        }
 
         for (int j = 0; j < nodes.getSize(); j++)
         {
@@ -345,9 +362,14 @@ static hkaAnimationBinding* createAnimationAndBinding(FbxScene* pScene, hkaSkele
 
         hkaSkeletonUtils::transformModelPoseToLocalPose(nodes.getSize(), &skeleton->m_parentIndices[0], &modelTransforms[0], &localTransforms[(int)i * nodes.getSize()]);
     }
+
     //Set root motion values in the array to the default reference frame, set it as the extracted motion for the animation
-    toPtrArray(sampleArray, DefaultRefFrame->m_referenceFrameSamples, DefaultRefFrame->m_numReferenceFrameSamples);
-    animation->setExtractedMotion(DefaultRefFrame);
+    if (extractMotion)
+    {
+        toPtrArray(sampleArray, DefaultRefFrame->m_referenceFrameSamples, DefaultRefFrame->m_numReferenceFrameSamples);
+        animation->setExtractedMotion(DefaultRefFrame);
+    }
+
 
     // Unroll quaternions so spline compression doesn't flicker.
     for (FbxLongLong i = 0; i < lFrameCount; i++)
@@ -426,6 +448,7 @@ int main(int argc, const char** argv)
     std::string srcFileName;
     std::string dstFileName;
     std::string sklFileName;
+    fbxsdk::FbxString armatureChildName = "Reference";
 
     hkStructureLayout layout =
 #ifdef _550
@@ -438,9 +461,10 @@ int main(int argc, const char** argv)
     bool saveTagfile = false;
 #endif
 
+    bool extractMotion = false;
     bool compress = true;
     double fps = 60.0;
-
+    
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "-s") == 0 || 
@@ -467,6 +491,19 @@ int main(int argc, const char** argv)
             strcmp(argv[i], "--windows") == 0)
         {
             layout = hkStructureLayout::MsvcWin32LayoutRules;
+        }
+        
+        else if (strcmp(argv[i], "-m") == 0 ||
+            strcmp(argv[i], "--motion") == 0)
+        {   
+            extractMotion = true;
+        }
+
+        else if (strcmp(argv[i], "-ac") == 0 ||
+            strcmp(argv[i], "--armatureChild") == 0)
+        {
+            if (i < argc - 1)
+                armatureChildName = argv[++i];
         }
 #endif
 
@@ -516,6 +553,8 @@ int main(int argc, const char** argv)
         printf("  -f or --fps:          Frames per second when generating animation data. 60 by default.\n\n");
 #ifdef _550
         printf("  -w or --windows:      Convert for Windows.\n");
+        printf("  -m or --motion:       Include root motion data in the export.\n");
+        printf("  -ac or --armatureChild: Specify the name of a direct child to the armature for root motion. (Reference by default)\n");
 #endif
         printf("  -x or --xbox360:      Convert for Xbox 360.\n");
         printf("  -p or --ps3:          Convert for PS3.\n");
@@ -587,7 +626,7 @@ int main(int argc, const char** argv)
         if (skeleton == nullptr)
             FATAL_ERROR("Failed to load skeleton file.");
 
-        hkaAnimationBinding* animationBinding = createAnimationAndBinding(lScene, skeleton, getFileNameWithoutExtension(sklFileName).c_str(), compress, fps);
+        hkaAnimationBinding* animationBinding = createAnimationAndBinding(lScene, skeleton, getFileNameWithoutExtension(sklFileName).c_str(), compress, fps, extractMotion, armatureChildName);
 
         if (animationBinding == nullptr)
             FATAL_ERROR("Failed to find animation data in FBX file.");
